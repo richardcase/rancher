@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
 var (
@@ -17,8 +17,8 @@ var (
 )
 
 func redirectAuth(rw http.ResponseWriter, req *http.Request) {
-	vars := mux.Vars(req)
-	bytes, err := base64.RawURLEncoding.DecodeString(vars["state"])
+	state := chi.URLParam(req, "state")
+	bytes, err := base64.RawURLEncoding.DecodeString(state)
 	if err != nil {
 		emberIndexUnlessAPI().ServeHTTP(rw, req)
 		return

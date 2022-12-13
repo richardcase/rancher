@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/oracle/oci-go-sdk/common"
 	"github.com/rancher/norman/api/access"
 	"github.com/rancher/norman/httperror"
@@ -77,7 +77,7 @@ func (handler *handler) ServeHTTP(writer http.ResponseWriter, req *http.Request)
 	provider := common.NewRawConfigurationProvider(creds.Tenancy, creds.User, creds.Region, creds.FingerPrint,
 		creds.PrivateKey, &creds.PrivateKeyPassphrase)
 
-	resourceType := mux.Vars(req)["resource"]
+	resourceType := chi.URLParam(req, "resource")
 
 	var serialized []byte
 

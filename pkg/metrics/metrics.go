@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rancher/norman/httperror"
 	"github.com/rancher/rancher/pkg/auth/util"
@@ -92,7 +92,7 @@ func (h *metricsHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if id := mux.Vars(req)["clusterID"]; id != "" {
+	if id := chi.URLParam(req, "clusterID"); id != "" {
 		h.getClusterObjectCount(id, rw, req)
 		return
 	}

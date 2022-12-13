@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/crewjam/saml"
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	responsewriter "github.com/rancher/apiserver/pkg/middleware"
 	v32 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/auth/settings"
@@ -38,7 +38,7 @@ type IDPMetadata struct {
 	SPSSODescriptors  []saml.SPSSODescriptor  `xml:"SPSSODescriptor"`
 }
 
-var root *mux.Router
+var root *chi.Mux
 var appliedVersion string
 var initMu sync.Mutex
 
@@ -178,20 +178,20 @@ func InitializeSamlServiceProvider(configToSet *v32.SamlConfig, name string) err
 
 	switch name {
 	case PingName:
-		root.Get("PingACS").HandlerFunc(provider.ServeHTTP)
-		root.Get("PingMetadata").HandlerFunc(provider.ServeHTTP)
+		root.Post("/v1-saml/ping/saml/acs", provider.ServeHTTP)
+		root.Get("/v1-saml/ping/saml/metadata", provider.ServeHTTP)
 	case ADFSName:
-		root.Get("AdfsACS").HandlerFunc(provider.ServeHTTP)
-		root.Get("AdfsMetadata").HandlerFunc(provider.ServeHTTP)
+		root.Post("/v1-saml/adfs/saml/acs", provider.ServeHTTP)
+		root.Get("/v1-saml/adfs/saml/metadata", provider.ServeHTTP)
 	case KeyCloakName:
-		root.Get("KeyCloakACS").HandlerFunc(provider.ServeHTTP)
-		root.Get("KeyCloakMetadata").HandlerFunc(provider.ServeHTTP)
+		root.Post("/v1-saml/keycloak/saml/acs", provider.ServeHTTP)
+		root.Get("/v1-saml/keycloak/saml/metadata", provider.ServeHTTP)
 	case OKTAName:
-		root.Get("OktaACS").HandlerFunc(provider.ServeHTTP)
-		root.Get("OktaMetadata").HandlerFunc(provider.ServeHTTP)
+		root.Post("/v1-saml/okta/saml/acs", provider.ServeHTTP)
+		root.Get("/v1-saml/okta/saml/metadata", provider.ServeHTTP)
 	case ShibbolethName:
-		root.Get("ShibbolethACS").HandlerFunc(provider.ServeHTTP)
-		root.Get("ShibbolethMetadata").HandlerFunc(provider.ServeHTTP)
+		root.Post("/v1-saml/shibboleth/saml/acs", provider.ServeHTTP)
+		root.Get("/v1-saml/shibboleth/saml/metadata", provider.ServeHTTP)
 	}
 
 	appliedVersion = configToSet.ResourceVersion
@@ -200,22 +200,28 @@ func InitializeSamlServiceProvider(configToSet *v32.SamlConfig, name string) err
 }
 
 func AuthHandler() http.Handler {
-	root = mux.NewRouter()
+	root = chi.NewRouter()
+	//root.Use(middleware.RequestID)
+	//root.Use(middleware.RealIP)
+	//root.Use(middleware.Logger)
+	//root.Use(middleware.Recoverer)
 
-	root.Methods("POST").Path("/v1-saml/ping/saml/acs").Name("PingACS")
-	root.Methods("GET").Path("/v1-saml/ping/saml/metadata").Name("PingMetadata")
+	root.Post("/v1-saml/ping/saml/acs", nil)
+	root.Get("/v1-saml/ping/saml/metadata", nil)
 
-	root.Methods("POST").Path("/v1-saml/adfs/saml/acs").Name("AdfsACS")
-	root.Methods("GET").Path("/v1-saml/adfs/saml/metadata").Name("AdfsMetadata")
+	root.Post("/v1-saml/adfs/saml/acs", nil)
+	root.Get("/v1-saml/adfs/saml/metadata", nil)
 
-	root.Methods("POST").Path("/v1-saml/keycloak/saml/acs").Name("KeyCloakACS")
-	root.Methods("GET").Path("/v1-saml/keycloak/saml/metadata").Name("KeyCloakMetadata")
+	root.Post("/v1-saml/keycloak/saml/acs", nil)
+	root.Get("/v1-saml/keycloak/saml/metadata", nil)
 
-	root.Methods("POST").Path("/v1-saml/okta/saml/acs").Name("OktaACS")
-	root.Methods("GET").Path("/v1-saml/okta/saml/metadata").Name("OktaMetadata")
+	root.Post("/v1-saml/okta/saml/acs", nil)
+	root.Get("/v1-saml/okta/saml/metadata", nil)
 
-	root.Methods("POST").Path("/v1-saml/shibboleth/saml/acs").Name("ShibbolethACS")
-	root.Methods("GET").Path("/v1-saml/shibboleth/saml/metadata").Name("ShibbolethMetadata")
+	root.Post("/v1-saml/shibboleth/saml/acs", nil)
+	root.Get("/v1-saml/shibboleth/saml/metadata", nil)
+
+	//root.Get("/", nil)
 
 	return root
 }

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	v3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	mgmtcontrollers "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	"github.com/rancher/remotedialer"
@@ -26,7 +26,7 @@ type aggregationHandler struct {
 	sync.Mutex
 
 	apiServiceCache mgmtcontrollers.APIServiceCache
-	mux             *mux.Router
+	mux             *chi.Mux
 	remote          *remotedialer.Server
 }
 
@@ -59,19 +59,29 @@ func (h *aggregationHandler) next(notFound http.Handler) http.Handler {
 	if h.mux == nil {
 		return notFound
 	}
-	h.mux.NotFoundHandler = notFound
+	//TODO: MUX
+	//h.mux.NotFound(notFound)
+	h.mux.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		notFound.ServeHTTP(w, r)
+	})
 	return h.mux
 }
 
 func (h *aggregationHandler) setEntries(routes []routeEntry) {
-	mux := mux.NewRouter()
-	mux.UseEncodedPath()
+	mux := chi.NewRouter()
+	//mux.Use(middleware.RequestID)
+	//mux.Use(middleware.RealIP)
+	//mux.Use(middleware.Logger)
+	//mux.Use(middleware.Recoverer)
+
+	//TODO: MUX
+	//mux.UseEncodedPath()
 	for _, entry := range routes {
 		if entry.prefix != "" {
-			mux.PathPrefix(entry.prefix).Handler(h.makeHandler(entry.uuid))
+			mux.Handle(entry.prefix, h.makeHandler(entry.uuid))
 		}
 		if entry.path != "" {
-			mux.Path(entry.path).Handler(h.makeHandler(entry.uuid))
+			mux.Handle(entry.path, h.makeHandler(entry.uuid))
 		}
 	}
 

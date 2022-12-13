@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/rancher/apiserver/pkg/server"
 	"github.com/rancher/apiserver/pkg/types"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
@@ -89,27 +89,39 @@ func (s *projectServer) middleware() func(http.Handler) http.Handler {
 	server := s.newAPIHandler()
 	server = prefix(server)
 
-	router := mux.NewRouter()
-	router.UseEncodedPath()
-	router.Path("/v1/management.cattle.io.clusters/{namespace}").Queries("link", "{type:projects?}").Handler(server)
-	router.Path("/v1/management.cattle.io.clusters/{namespace}/{type}").Handler(server)
-	router.Path("/v1/management.cattle.io.clusters/{namespace}/{type}/{name}").Handler(server)
-	router.Path("/v1/management.cattle.io.clusters/{clusterID}/{type}/{namespace}/{name}").Handler(server)
+	router := chi.NewRouter()
+	//router.Use(middleware.RequestID)
+	//router.Use(middleware.RealIP)
+	//router.Use(middleware.Logger)
+	//router.Use(middleware.Recoverer)
+	//TODO: MUX
+	//router.UseEncodedPath()
+	//TODO: MUX
+	//router.Path("/v1/management.cattle.io.clusters/{namespace}").Queries("link", "{type:projects?}").Handler(server)
+	router.Handle("/v1/management.cattle.io.clusters/{namespace}?link={link}&type=projects", server)
+	router.Handle("/v1/management.cattle.io.clusters/{namespace}/{type}", server)
+	router.Handle("/v1/management.cattle.io.clusters/{namespace}/{type}/{name}", server)
+	router.Handle("/v1/management.cattle.io.clusters/{clusterID}/{type}/{namespace}/{name}", server)
 
 	return func(next http.Handler) http.Handler {
-		router.NotFoundHandler = next
+		router.NotFound(next.ServeHTTP)
 		return router
 	}
 }
 
 func prefix(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		vars := mux.Vars(req)
-		if vars["clusterID"] != "" {
-			vars["prefix"] = "/v1/management.cattle.io.clusters/" + vars["clusterID"]
+		clusterID := chi.URLParam(req, "clusterID")
+		var prefix string
+		if clusterID != "" {
+			prefix = "/v1/management.cattle.io.clusters/" + clusterID
 		} else {
-			vars["prefix"] = "/v1/management.cattle.io.clusters/" + vars["namespace"]
+			namespace := chi.URLParam(req, "namespace")
+			prefix = "/v1/management.cattle.io.clusters/" + namespace
 		}
-		next.ServeHTTP(rw, req)
+
+		ctx := context.WithValue(req.Context(), "prefix", prefix)
+
+		next.ServeHTTP(rw, req.WithContext(ctx))
 	})
 }

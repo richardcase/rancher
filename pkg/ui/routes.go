@@ -3,15 +3,20 @@ package ui
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/rancher/apiserver/pkg/parse"
 	"github.com/rancher/rancher/pkg/cacerts"
 	v3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 )
 
 func New(_ v3.PreferenceCache, clusterRegistrationTokenCache v3.ClusterRegistrationTokenCache) http.Handler {
-	router := mux.NewRouter()
-	router.UseEncodedPath()
+	router := chi.NewRouter()
+	//router.Use(middleware.RequestID)
+	//router.Use(middleware.RealIP)
+	//router.Use(middleware.Logger)
+	//router.Use(middleware.Recoverer)
+	//TODO: mux
+	//router.UseEncodedPath()
 
 	router.Handle("/", PreferredIndex())
 	router.Handle("/cacerts", cacerts.Handler(clusterRegistrationTokenCache))
@@ -25,17 +30,17 @@ func New(_ v3.PreferenceCache, clusterRegistrationTokenCache v3.ClusterRegistrat
 	router.Handle("/VERSION.txt", ember.ServeAsset())
 	router.Handle("/favicon.png", vue.ServeFaviconDashboard())
 	router.Handle("/favicon.ico", vue.ServeFaviconDashboard())
-	router.Path("/verify-auth-azure").Queries("state", "{state}").HandlerFunc(redirectAuth)
-	router.Path("/verify-auth").Queries("state", "{state}").HandlerFunc(redirectAuth)
-	router.PathPrefix("/api-ui").Handler(ember.ServeAsset())
-	router.PathPrefix("/assets/rancher-ui-driver-linode").Handler(emberAlwaysOffline.ServeAsset())
-	router.PathPrefix("/assets").Handler(ember.ServeAsset())
-	router.PathPrefix("/dashboard/").Handler(vue.IndexFileOnNotFound())
-	router.PathPrefix("/ember-fetch").Handler(ember.ServeAsset())
-	router.PathPrefix("/engines-dist").Handler(ember.ServeAsset())
-	router.PathPrefix("/static").Handler(ember.ServeAsset())
-	router.PathPrefix("/translations").Handler(ember.ServeAsset())
-	router.NotFoundHandler = emberIndexUnlessAPI()
+	router.HandleFunc("/verify-auth-azure?state={state}", redirectAuth)
+	router.HandleFunc("/verify-auth?state={state}", redirectAuth)
+	router.Handle("/api-ui", ember.ServeAsset())
+	router.Handle("/assets/rancher-ui-driver-linode", emberAlwaysOffline.ServeAsset())
+	router.Handle("/assets", ember.ServeAsset())
+	router.Handle("/dashboard/", vue.IndexFileOnNotFound())
+	router.Handle("/ember-fetch", ember.ServeAsset())
+	router.Handle("/engines-dist", ember.ServeAsset())
+	router.Handle("/static", ember.ServeAsset())
+	router.Handle("/translations", ember.ServeAsset())
+	router.NotFound(emberIndexUnlessAPI().ServeHTTP)
 
 	return router
 }

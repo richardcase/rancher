@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	v1 "github.com/rancher/wrangler/pkg/generated/controllers/core/v1"
 	"k8s.io/apiserver/pkg/endpoints/request"
 )
@@ -28,7 +28,7 @@ func NewProxy(secrets v1.SecretCache, githubURL, namespace, dataKey string) (htt
 	return &Proxy{
 		proxy: &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
-				path := mux.Vars(req)["path"]
+				path := chi.URLParam(req, "path")
 				if !strings.HasPrefix(path, "/") {
 					path = "/" + path
 				}

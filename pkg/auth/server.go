@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/rancher/norman/store/proxy"
 	"github.com/rancher/rancher/pkg/api/norman"
 	"github.com/rancher/rancher/pkg/auth/api"
@@ -91,19 +91,40 @@ func newAPIManagement(ctx context.Context, scaledContext *config.ScaledContext) 
 
 	saml := saml.AuthHandler()
 
-	root := mux.NewRouter()
-	root.UseEncodedPath()
-	root.PathPrefix("/v3-public").Handler(publicAPI)
-	root.PathPrefix("/v1-saml").Handler(saml)
-	root.NotFoundHandler = privateAPI
+	root := chi.NewRouter()
+	//root.Use(middleware.RequestID)
+	//root.Use(middleware.RealIP)
+	//root.Use(middleware.Logger)
+	//root.Use(middleware.Recoverer)
+
+	// TODO: MUX
+	//root.UseEncodedPath()
+
+	root.Mount("/v3-public", publicAPI)
+	root.Handle("/v1-saml", saml)
+	privateAPIRouter := root.Group(privateAPI)
+	root.NotFound(privateAPIRouter.ServeHTTP)
+
+	for _, route := range root.Routes() {
+		fmt.Printf("route: %s\n", route.Pattern)
+		if route.SubRoutes != nil {
+			for _, child := range route.SubRoutes.Routes() {
+				fmt.Printf("\t child router: %s\n", child.Pattern)
+			}
+
+		}
+	}
 
 	return func(next http.Handler) http.Handler {
-		privateAPI.NotFoundHandler = next
+		// TODO: MUX
+		//privateAPI.NotFoundHandler = next
+		//privateAPI.N
+		privateAPIRouter.NotFound(next.ServeHTTP)
 		return root
 	}, nil
 }
 
-func newPrivateAPI(ctx context.Context, scaledContext *config.ScaledContext) (*mux.Router, error) {
+func newPrivateAPI(ctx context.Context, scaledContext *config.ScaledContext) (func(r chi.Router), error) {
 	tokenAPI, err := tokens.NewAPIHandler(ctx, scaledContext, norman.ConfigureAPIUI)
 	if err != nil {
 		return nil, err
@@ -114,17 +135,19 @@ func newPrivateAPI(ctx context.Context, scaledContext *config.ScaledContext) (*m
 		return nil, err
 	}
 
-	root := mux.NewRouter()
-	root.UseEncodedPath()
-	root.Use(requests.NewAuthenticatedFilter)
-	root.PathPrefix("/v3/identit").Handler(tokenAPI)
-	root.PathPrefix("/v3/token").Handler(tokenAPI)
-	root.PathPrefix("/v3/authConfig").Handler(otherAPIs)
-	root.PathPrefix("/v3/principal").Handler(otherAPIs)
-	root.PathPrefix("/v3/user").Handler(otherAPIs)
-	root.PathPrefix("/v3/schema").Handler(otherAPIs)
-	root.PathPrefix("/v3/subscribe").Handler(otherAPIs)
-	return root, nil
+	return func(r chi.Router) {
+		//root.UseEncodedPath()
+		r.Use(requests.NewAuthenticatedFilter)
+		r.Handle("/v3/identit", tokenAPI)
+		r.Handle("/v3/token", tokenAPI)
+		r.Handle("/v3/authConfig", otherAPIs)
+		r.Handle("/v3/principal", otherAPIs)
+		r.Handle("/v3/user", otherAPIs)
+		r.Handle("/v3/schema", otherAPIs)
+		r.Handle("/v3/subscribe", otherAPIs)
+
+	}, nil
+
 }
 
 func (s *Server) OnLeader(ctx context.Context) error {

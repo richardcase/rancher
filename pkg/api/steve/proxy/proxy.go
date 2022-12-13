@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	gmux "github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	v3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	managementv3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
 	"github.com/rancher/rancher/pkg/settings"
@@ -63,25 +63,34 @@ func NewProxyMiddleware(sar v1.AuthorizationV1Interface,
 
 	proxyHandler := NewProxyHandler(authorizer, dialerFactory, clusters)
 
-	mux := gmux.NewRouter()
-	mux.UseEncodedPath()
-	mux.Path("/v1/management.cattle.io.clusters/{clusterID}").Queries("link", "shell").HandlerFunc(routeToShellProxy("link", "shell", localSupport, localCluster, mux, proxyHandler))
-	mux.Path("/v1/management.cattle.io.clusters/{clusterID}").Queries("action", "apply").HandlerFunc(routeToShellProxy("action", "apply", localSupport, localCluster, mux, proxyHandler))
-	mux.Path("/v3/clusters/{clusterID}").Queries("shell", "true").HandlerFunc(routeToShellProxy("link", "shell", localSupport, localCluster, mux, proxyHandler))
-	mux.Path("/{prefix:k8s/clusters/[^/]+}{suffix:/v1.*}").MatcherFunc(proxyHandler.MatchNonLegacy("/k8s/clusters/")).Handler(proxyHandler)
+	mux := chi.NewRouter()
+	//mux.Use(middleware.RequestID)
+	//mux.Use(middleware.RealIP)
+	//mux.Use(middleware.Logger)
+	//mux.Use(middleware.Recoverer)
+
+	//TODO: MUX
+	//mux.UseEncodedPath()
+	mux.HandleFunc("/v1/management.cattle.io.clusters/{clusterID}?link=shell", routeToShellProxy("link", "shell", localSupport, localCluster, mux, proxyHandler))
+	mux.HandleFunc("/v1/management.cattle.io.clusters/{clusterID}?action=apply", routeToShellProxy("action", "apply", localSupport, localCluster, mux, proxyHandler))
+	mux.HandleFunc("/v3/clusters/{clusterID}?shell=true", routeToShellProxy("link", "shell", localSupport, localCluster, mux, proxyHandler))
+	//TODO: MUX
+	//mux.Path("/{prefix:k8s/clusters/[^/]+}{suffix:/v1.*}").MatcherFunc(proxyHandler.MatchNonLegacy("/k8s/clusters/")).Handler(proxyHandler)
+	mux.Handle("/{prefix:k8s/clusters/[^/]+}{suffix:/v1.*}", proxyHandler)
 
 	return func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-			mux.NotFoundHandler = handler
+			mux.NotFound(func(w http.ResponseWriter, r *http.Request) {
+				handler.ServeHTTP(w, r)
+			})
 			mux.ServeHTTP(rw, req)
 		})
 	}, nil
 }
 
-func routeToShellProxy(key, value string, localSupport bool, localCluster http.Handler, mux *gmux.Router, proxyHandler *Handler) func(rw http.ResponseWriter, r *http.Request) {
+func routeToShellProxy(key, value string, localSupport bool, localCluster http.Handler, mux *chi.Mux, proxyHandler *Handler) func(rw http.ResponseWriter, r *http.Request) {
 	return func(rw http.ResponseWriter, r *http.Request) {
-		vars := gmux.Vars(r)
-		cluster := vars["clusterID"]
+		cluster := chi.URLParam(r, "clusterID")
 		if cluster == "local" {
 			if localSupport {
 				authed := proxyHandler.userCanAccessCluster(r, cluster)
@@ -95,17 +104,21 @@ func routeToShellProxy(key, value string, localSupport bool, localCluster http.H
 				r.URL.Path = "/v1/management.cattle.io.clusters/local"
 				localCluster.ServeHTTP(rw, r)
 			} else {
-				mux.NotFoundHandler.ServeHTTP(rw, r)
+				mux.NotFoundHandler().ServeHTTP(rw, r)
 			}
 			return
 		}
-		vars["prefix"] = "k8s/clusters/" + cluster
-		vars["suffix"] = "/v1/management.cattle.io.clusters/local"
+
+		prefix := "k8s/clusters/" + cluster
+		suffix := "/v1/management.cattle.io.clusters/local"
 		q := r.URL.Query()
 		q.Set(key, value)
 		r.URL.RawQuery = q.Encode()
 		r.URL.Path = "/k8s/clusters/" + cluster + "/v1/management.cattle.io.clusters/local"
-		proxyHandler.ServeHTTP(rw, r)
+
+		ctx := context.WithValue(r.Context(), "prefix", prefix)
+		ctx = context.WithValue(ctx, "suffix", suffix)
+		proxyHandler.ServeHTTP(rw, r.WithContext(ctx))
 	}
 }
 
@@ -118,27 +131,28 @@ func NewProxyHandler(authorizer authorizer.Authorizer,
 	}
 }
 
-func (h *Handler) MatchNonLegacy(prefix string) gmux.MatcherFunc {
-	return func(req *http.Request, match *gmux.RouteMatch) bool {
-		clusterID := strings.TrimPrefix(req.URL.Path, prefix)
-		clusterID = strings.SplitN(clusterID, "/", 2)[0]
-		if match.Vars == nil {
-			match.Vars = map[string]string{}
-		}
-		match.Vars["clusterID"] = clusterID
+//TODO: MUX
+// func (h *Handler) MatchNonLegacy(prefix string) http.Handler {
+// 	return func(req *http.Request, match *chi.RouteMatch) bool {
+// 		clusterID := strings.TrimPrefix(req.URL.Path, prefix)
+// 		clusterID = strings.SplitN(clusterID, "/", 2)[0]
+// 		if match.Vars == nil {
+// 			match.Vars = map[string]string{}
+// 		}
+// 		match.Vars["clusterID"] = clusterID
 
-		return true
-	}
-}
+// 		return true
+// 	}
+// }
 
 func (h *Handler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	clusterID := gmux.Vars(req)["clusterID"]
+	clusterID := chi.URLParam(req, "clusterID")
 	authed := h.userCanAccessCluster(req, clusterID)
 	if !authed {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	prefix := "/" + gmux.Vars(req)["prefix"]
+	prefix := "/" + chi.URLParam(req, "prefix")
 	handler, err := h.next(clusterID, prefix)
 	if err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)

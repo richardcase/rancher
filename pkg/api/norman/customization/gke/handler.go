@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/rancher/norman/api/access"
 	"github.com/rancher/norman/httperror"
 	"github.com/rancher/norman/types"
@@ -73,7 +73,7 @@ func (h *handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	var errCode int
 	var err error
 
-	resourceType := mux.Vars(req)["resource"]
+	resourceType := chi.URLParam(req, "resource")
 
 	switch resourceType {
 	case "gkeMachineTypes":

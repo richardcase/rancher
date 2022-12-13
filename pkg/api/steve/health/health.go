@@ -3,11 +3,11 @@ package health
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"k8s.io/apiserver/pkg/server/healthz"
 )
 
-func Register(router *mux.Router) {
+func Register(router *chi.Mux) {
 	healthz.InstallHandler((*muxWrapper)(router))
 	router.Handle("/ping", Pong())
 }
@@ -18,8 +18,8 @@ func Pong() http.Handler {
 	})
 }
 
-type muxWrapper mux.Router
+type muxWrapper chi.Mux
 
 func (m *muxWrapper) Handle(path string, handler http.Handler) {
-	(*mux.Router)(m).Handle(path, handler)
+	(*chi.Mux)(m).Handle(path, handler)
 }

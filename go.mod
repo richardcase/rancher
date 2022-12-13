@@ -82,7 +82,6 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru v0.5.4
@@ -159,7 +158,10 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
-require github.com/google/gnostic v0.5.7-v3refs
+require (
+	github.com/go-chi/chi/v5 v5.0.8
+	github.com/google/gnostic v0.5.7-v3refs
+)
 
 require (
 	cloud.google.com/go/compute v1.6.1 // indirect
@@ -232,6 +234,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
+	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gosuri/uitable v0.0.4 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect

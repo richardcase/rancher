@@ -3,10 +3,11 @@ package multiclustermanager
 import (
 	"context"
 	"net/http"
+	"strings"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/rancher/apiserver/pkg/parse"
 	"github.com/rancher/rancher/pkg/api/norman"
 	"github.com/rancher/rancher/pkg/api/norman/customization/aks"
 	"github.com/rancher/rancher/pkg/api/norman/customization/clusterregistrationtokens"
@@ -71,70 +72,120 @@ func router(ctx context.Context, localClusterEnabled bool, tunnelAuthorizer *mcm
 
 	supportConfigGenerator := supportconfigs.NewHandler(scaledContext)
 	// Unauthenticated routes
-	unauthed := mux.NewRouter()
-	unauthed.UseEncodedPath()
+	unauthed := chi.NewRouter()
+	unauthed.Use(middleware.RequestID)
+	unauthed.Use(middleware.RealIP)
+	//unauthed.Use(middleware.Logger)
+	//unauthed.Use(middleware.Recoverer)
+	//TODO: MUX
+	//unauthed.UseEncodedPath()
 
-	unauthed.Path("/").MatcherFunc(parse.MatchNotBrowser).Handler(managementAPI)
+	//TODO: mux
+	//unauthed.Use() Path("/").MatcherFunc(parse.MatchNotBrowser).Handler(managementAPI)
+	//unauthed.With(NotForBrowser).Handle("/", managementAPI)
+	unauthed.Handle("/", managementAPI)
 	unauthed.Handle("/v3/connect/config", connectConfigHandler)
 	unauthed.Handle("/v3/connect", connectHandler)
 	unauthed.Handle("/v3/connect/register", connectHandler)
 	unauthed.Handle("/v3/import/{token}_{clusterId}.yaml", http.HandlerFunc(clusterImport.ClusterImportHandler))
-	unauthed.Handle("/v3/settings/cacerts", managementAPI).MatcherFunc(onlyGet)
-	unauthed.Handle("/v3/settings/first-login", managementAPI).MatcherFunc(onlyGet)
-	unauthed.Handle("/v3/settings/ui-banners", managementAPI).MatcherFunc(onlyGet)
-	unauthed.Handle("/v3/settings/ui-issues", managementAPI).MatcherFunc(onlyGet)
-	unauthed.Handle("/v3/settings/ui-pl", managementAPI).MatcherFunc(onlyGet)
-	unauthed.Handle("/v3/settings/ui-brand", managementAPI).MatcherFunc(onlyGet)
-	unauthed.Handle("/v3/settings/ui-default-landing", managementAPI).MatcherFunc(onlyGet)
+	unauthed.Method("GET", "/v3/settings/cacerts", managementAPI)
+	unauthed.Method("GET", "/v3/settings/first-login", managementAPI)
+	unauthed.Method("GET", "/v3/settings/ui-banners", managementAPI)
+	unauthed.Method("GET", "/v3/settings/ui-issues", managementAPI)
+	unauthed.Method("GET", "/v3/settings/ui-pl", managementAPI)
+	unauthed.Method("GET", "/v3/settings/ui-brand", managementAPI)
+	unauthed.Method("GET", "/v3/settings/ui-default-landing", managementAPI)
 	unauthed.Handle("/rancherversion", version.NewVersionHandler())
-	unauthed.PathPrefix("/v1-{prefix}-release/channel").Handler(channelserver)
-	unauthed.PathPrefix("/v1-{prefix}-release/release").Handler(channelserver)
-	unauthed.PathPrefix("/v1-saml").Handler(saml.AuthHandler())
-	unauthed.PathPrefix("/v3-public").Handler(publicAPI)
+	unauthed.Handle("/v1-{prefix}-release/channel", channelserver)
+	unauthed.Handle("/v1-{prefix}-release/release", channelserver)
+	unauthed.Handle("/v1-saml", saml.AuthHandler())
+	unauthed.Handle("/v3-public", publicAPI)
 
 	// Authenticated routes
-	authed := mux.NewRouter()
-	authed.UseEncodedPath()
+	authed := chi.NewRouter()
+	//authed.Use(middleware.RequestID)
+	//authed.Use(middleware.RealIP)
+	//authed.Use(middleware.Logger)
+	//authed.Use(middleware.Recoverer)
+	//authed.UseEncodedPath()
 	impersonatingAuth := auth.ToMiddleware(requests.NewImpersonatingAuth(sar.NewSubjectAccessReview(clusterManager)))
 	accessControlHandler := rbac.NewAccessControlHandler()
 
-	authed.Use(mux.MiddlewareFunc(impersonatingAuth))
-	authed.Use(mux.MiddlewareFunc(accessControlHandler))
+	authed.Use(impersonatingAuth)
+	authed.Use(accessControlHandler)
 	authed.Use(requests.NewAuthenticatedFilter)
 
-	authed.Path("/meta/{resource:aks.+}").Handler(aks.NewAKSHandler(scaledContext))
-	authed.Path("/meta/{resource:gke.+}").Handler(gke.NewGKEHandler(scaledContext))
-	authed.Path("/meta/oci/{resource}").Handler(oci.NewOCIHandler(scaledContext))
-	authed.Path("/meta/vsphere/{field}").Handler(vsphere.NewVsphereHandler(scaledContext))
-	authed.Path("/v3/tokenreview").Methods(http.MethodPost).Handler(&webhook.TokenReviewer{})
-	authed.Path("/metrics/{clusterID}").Handler(metricsHandler)
-	authed.Path(supportconfigs.Endpoint).Handler(&supportConfigGenerator)
-	authed.PathPrefix("/k8s/clusters/").Handler(k8sProxy)
-	authed.PathPrefix("/meta/proxy").Handler(metaProxy)
-	authed.PathPrefix("/v1-telemetry").Handler(telemetry.NewProxy())
-	authed.PathPrefix("/v3/identit").Handler(tokenAPI)
-	authed.PathPrefix("/v3/token").Handler(tokenAPI)
-	authed.PathPrefix("/v3").Handler(managementAPI)
+	authed.Handle("/meta/{resource:aks.+}", aks.NewAKSHandler(scaledContext))
+	authed.Handle("/meta/{resource:gke.+}", gke.NewGKEHandler(scaledContext))
+	authed.Handle("/meta/oci/{resource}", oci.NewOCIHandler(scaledContext))
+	authed.Handle("/meta/vsphere/{field}", vsphere.NewVsphereHandler(scaledContext))
+	authed.Method("POST", "/v3/tokenreview", &webhook.TokenReviewer{})
+	authed.Handle("/metrics/{clusterID}", metricsHandler)
+	authed.Handle(supportconfigs.Endpoint, &supportConfigGenerator)
+	authed.Handle("/k8s/clusters/", k8sProxy)
+	authed.Handle("/meta/proxy", metaProxy)
+	authed.Handle("/v1-telemetry", telemetry.NewProxy())
+	authed.Handle("/v3/identit", tokenAPI)
+	authed.Handle("/v3/token", tokenAPI)
+	authed.Handle("/v3", managementAPI)
 
 	// Metrics authenticated route
-	metricsAuthed := mux.NewRouter()
-	metricsAuthed.UseEncodedPath()
+	metricsAuthed := chi.NewRouter()
+	metricsAuthed.Use(middleware.RequestID)
+	metricsAuthed.Use(middleware.RealIP)
+	metricsAuthed.Use(middleware.Logger)
+	metricsAuthed.Use(middleware.Recoverer)
+	//TODO: mux
+	//metricsAuthed.UseEncodedPath()
 	tokenReviewAuth := auth.ToMiddleware(requests.NewTokenReviewAuth(scaledContext.K8sClient.AuthenticationV1()))
-	metricsAuthed.Use(mux.MiddlewareFunc(tokenReviewAuth.Chain(impersonatingAuth)))
-	metricsAuthed.Use(mux.MiddlewareFunc(accessControlHandler))
+	metricsAuthed.Use(tokenReviewAuth.Chain(impersonatingAuth))
+	metricsAuthed.Use(accessControlHandler)
 	metricsAuthed.Use(requests.NewAuthenticatedFilter)
 
-	metricsAuthed.Path("/metrics").Handler(metricsHandler)
+	metricsAuthed.Handle("/metrics", metricsHandler)
 
-	unauthed.NotFoundHandler = authed
-	authed.NotFoundHandler = metricsAuthed
+	//unauthed.NotFoundHandler = authed
+	unauthed.NotFound(authed.ServeHTTP)
+	//authed.NotFoundHandler = metricsAuthed
+	authed.NotFound(metricsAuthed.ServeHTTP)
 	return func(next http.Handler) http.Handler {
-		metricsAuthed.NotFoundHandler = next
+		metricsAuthed.NotFound(next.ServeHTTP)
 		return unauthed
 	}, nil
 }
 
-// onlyGet will match only GET but will not return a 405 like route.Methods and instead just not match
-func onlyGet(req *http.Request, m *mux.RouteMatch) bool {
-	return req.Method == http.MethodGet
+func IsBrowser(req *http.Request, checkAccepts bool) bool {
+	accepts := strings.ToLower(req.Header.Get("Accept"))
+	userAgent := strings.ToLower(req.Header.Get("User-Agent"))
+
+	if accepts == "" || !checkAccepts {
+		accepts = "*/*"
+	}
+
+	// User agent has Mozilla and browser accepts */*
+	return strings.Contains(userAgent, "mozilla") && strings.Contains(accepts, "*/*")
+}
+
+func ForBrowser(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		isBrowser := IsBrowser(r, true)
+		if isBrowser {
+			next.ServeHTTP(w, r)
+		}
+
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func NotForBrowser(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		isBrowser := IsBrowser(r, true)
+		if !isBrowser {
+			next.ServeHTTP(w, r)
+		}
+
+	}
+
+	return http.HandlerFunc(fn)
 }

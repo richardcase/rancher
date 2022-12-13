@@ -3,7 +3,7 @@ package clusterregistrationtokens
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/rancher/norman/types"
 	"github.com/rancher/norman/urlbuilder"
 	v3 "github.com/rancher/rancher/pkg/generated/norman/management.cattle.io/v3"
@@ -20,8 +20,8 @@ type ClusterImport struct {
 
 func (ch *ClusterImport) ClusterImportHandler(resp http.ResponseWriter, req *http.Request) {
 	resp.Header().Set("Content-Type", "text/plain")
-	token := mux.Vars(req)["token"]
-	clusterID := mux.Vars(req)["clusterId"]
+	token := chi.URLParam(req, "token")
+	clusterID := chi.URLParam(req, "clusterId")
 
 	urlBuilder, err := urlbuilder.New(req, schema.Version, types.NewSchemas())
 	if err != nil {

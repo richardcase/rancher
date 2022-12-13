@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/azure"
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/rancher/aks-operator/pkg/aks"
 	"github.com/rancher/machine/drivers/azure/azureutil"
 	"github.com/rancher/norman/api/access"
@@ -67,7 +67,7 @@ func NewAKSHandler(scaledContext *config.ScaledContext) http.Handler {
 func (h *handler) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	writer.Header().Set("Content-Type", "application/json")
 
-	resourceType := mux.Vars(req)["resource"]
+	resourceType := chi.URLParam(req, "resource")
 
 	if resourceType == "aksCheckCredentials" {
 		if req.Method != http.MethodPost {

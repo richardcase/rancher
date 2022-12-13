@@ -3,7 +3,7 @@ package projects
 import (
 	"strings"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"github.com/rancher/apiserver/pkg/types"
 	"github.com/rancher/wrangler/pkg/kv"
 )
@@ -13,7 +13,7 @@ type stripNS struct {
 }
 
 func (s stripNS) Write(apiOp *types.APIRequest, code int, obj types.APIObject) {
-	if mux.Vars(apiOp.Request)["clusterID"] == "" {
+	if chi.URLParam(apiOp.Request, "clusterID") == "" {
 		prefix := apiOp.Namespace + "/"
 		if strings.HasPrefix(obj.ID, prefix) {
 			_, obj.ID = kv.RSplit(obj.ID, "/")
@@ -23,7 +23,7 @@ func (s stripNS) Write(apiOp *types.APIRequest, code int, obj types.APIObject) {
 }
 
 func (s stripNS) WriteList(apiOp *types.APIRequest, code int, obj types.APIObjectList) {
-	if mux.Vars(apiOp.Request)["clusterID"] == "" {
+	if chi.URLParam(apiOp.Request, "clusterID") == "" {
 		prefix := apiOp.Namespace + "/"
 		for i := range obj.Objects {
 			if strings.HasPrefix(obj.Objects[i].ID, prefix) {

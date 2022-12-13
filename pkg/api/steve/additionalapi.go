@@ -4,7 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	gmux "github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rancher/rancher/pkg/api/steve/aggregation"
 	"github.com/rancher/rancher/pkg/api/steve/github"
 	"github.com/rancher/rancher/pkg/api/steve/health"
@@ -21,15 +22,21 @@ import (
 func AdditionalAPIsPreMCM(config *wrangler.Context) func(http.Handler) http.Handler {
 	if features.RKE2.Enabled() {
 		connectHandler := configserver.New(config)
-		mux := gmux.NewRouter()
-		mux.UseEncodedPath()
+		mux := chi.NewRouter()
+		mux.Use(middleware.RequestID)
+		mux.Use(middleware.RealIP)
+		mux.Use(middleware.Logger)
+		mux.Use(middleware.Recoverer)
+
+		//TODO: MUX
+		//mux.UseEncodedPath()
 		mux.Handle(configserver.ConnectAgent, connectHandler)
 		mux.Handle(configserver.ConnectConfigYamlPath, connectHandler)
 		mux.Handle(configserver.ConnectClusterInfo, connectHandler)
 		mux.Handle(installer.SystemAgentInstallPath, installer.Handler)
 		mux.Handle(installer.WindowsRke2InstallPath, installer.Handler)
 		return func(next http.Handler) http.Handler {
-			mux.NotFoundHandler = next
+			mux.NotFound(next.ServeHTTP)
 			return mux
 		}
 	}
@@ -53,14 +60,22 @@ func AdditionalAPIs(ctx context.Context, config *wrangler.Context, steve *steve.
 		return nil, err
 	}
 
-	mux := gmux.NewRouter()
-	mux.UseEncodedPath()
+	mux := chi.NewRouter()
+	//mux.Use(middleware.RequestID)
+	//mux.Use(middleware.RealIP)
+	//mux.Use(middleware.Logger)
+	//mux.Use(middleware.Recoverer)
+
+	//TODO: MUX
+	//mux.UseEncodedPath()
 	mux.Handle("/v1/github{path:.*}", githubHandler)
 	mux.Handle("/v3/connect", Tunnel(config))
 	health.Register(mux)
 
 	return func(next http.Handler) http.Handler {
-		mux.NotFoundHandler = clusterAPI(next)
+		mux.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			clusterAPI(next).ServeHTTP(w, r)
+		})
 		return mux
 	}, nil
 }
