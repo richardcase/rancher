@@ -4,6 +4,7 @@
 
 load("./tilt/project/Tiltfile", "project_enable")
 load("./tilt/io/Tiltfile", "info", "warn", "file_write")
+load('ext://namespace', 'namespace_create')
 
 
 # set defaults
@@ -47,17 +48,20 @@ projects = {
             "go.sum",
             "pkg",
         ],
-        "chart": {
-            "dir": "chart",
-            "values": [
-                "ingress.enabled=false",
-                "replicas=1",
-                "tls=external",
-                "postDelete.enabled=false",
-                "debug=false"
-            ],
-            "container_name": "rancher"
-        },
+        "charts": [ 
+            {
+                "dir": "chart",
+                "values": [
+                    "ingress.enabled=false",
+                    "replicas=1",
+                    "tls=external",
+                    "postDelete.enabled=false",
+                    "debug=false"
+                ],
+                "container_name": "rancher",
+                "namespace": "cattle-system"
+            }
+        ],
         "env": {
             "CATTLE_DEV_MODE": "30",
             "CATTLE_FEATURES": "embedded-cluster-api=true",
@@ -75,6 +79,7 @@ def include_user_tilt_files():
         include(f)
 
 def enable_projects():
+    namespace_create("cattle-system")
     for name in get_projects():
         p = projects.get(name)
         project_enable(name, p, settings.get("debug").get(name, {}))

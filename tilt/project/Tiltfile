@@ -1,7 +1,7 @@
 # -*- mode: Python -*-
 
 load("../k8s/Tiltfile", "k8s_find_object_name")
-load("../io/Tiltfile", "info", "file_write")
+load("../io/Tiltfile", "info", "file_write", "dir_create")
 
 def project_enable(name, project, debug):
     """Enable a project in Tilt
@@ -60,29 +60,48 @@ def project_enable(name, project, debug):
     )
 
     context = project.get("context")
+    tiltbuild_dir = context + "/.tiltbuild"
+    dir_create(tiltbuild_dir)
 
-    chart = project.get("chart")
-    if chart != None:
-        info("doing helm install")
-        chart_dir = chart.get("dir", "chart")
-        values = chart.get("values", None)
-        yaml = helm(context + '/' + chart_dir, set=values)
-        containerName = chart.get("container_name", "manager")
-        yaml = update_manager(yaml, containerName, debug, env)
-        yaml_path = context + "/.tiltbuild/manifest.yaml"
-        file_write(yaml_path, yaml)
-        k8s_yaml(yaml)
 
-        objs = decode_yaml_stream(yaml)
-        k8s_resource(
-            workload = k8s_find_object_name(objs, "Deployment"),
-            #objects = [find_object_qualified_name(objs, "Provider")],
-            new_name = label.lower() + "_controller",
-            labels = [label, "ALL.controllers"],
-            port_forwards = port_forwards,
-            links = links,
-            #resource_deps = ["provider_crd"],
-        )
+    charts = project.get("charts")
+    if charts != None:
+        chart_no = 1
+        for chart in charts:
+            info("doing helm install")
+            chart_dir = chart.get("dir", "chart")
+            values = chart.get("values", None)
+            namespace  = chart.get("namespace", "")
+            yaml = helm(context + '/' + chart_dir, set=values, namespace=namespace)
+            containerName = chart.get("container_name", "manager")
+            if containerName != "":
+                yaml = update_manager(yaml, containerName, debug, env)
+            yaml_path = tiltbuild_dir + "/manifest" + str(chart_no) + ".yaml"
+            file_write(yaml_path, yaml)
+            objs = decode_yaml_stream(yaml)
+            customDeployName = chart.get("custom_deploy_name", "")
+            deps = chart.get("deps", [])
+            if customDeployName == "":
+                k8s_yaml(yaml)
+                k8s_resource(
+                    workload = k8s_find_object_name(objs, "Deployment"),
+                    #objects = [find_object_qualified_name(objs, "Provider")],
+                    new_name = label.lower() + "_controller",
+                    labels = [label, "ALL.controllers"],
+                    port_forwards = port_forwards,
+                    links = links,
+                    resource_deps = deps,
+                )
+            else:
+                apply_cmd = "kubectl apply -f {manifestpath} -o yaml".format(
+                    manifestpath = yaml_path,
+                )
+                delete_cmd = "kubectl delete -f {manifestpath} -o yaml".format(
+                    manifestpath = yaml_path,
+                )
+                k8s_custom_deploy(customDeployName, deps=[], apply_cmd=apply_cmd, delete_cmd=delete_cmd)
+                k8s_resource(customDeployName, labels=[label, "ALL.custom"])
+            chart_no = chart_no + 1
     info("finished adding project")
 
 def update_manager(yaml, containerName, debug, env):
@@ -130,18 +149,20 @@ def update_manager(yaml, containerName, debug, env):
                         cmd.append("/manager")
 
                         debugArgs = []
-                        for arg in c["args"]:
-                            if arg == "--leader-elect" or arg == "--leader-elect=true":
-                                continue
-                            debugArgs.append(arg)
+                        containerArgs = c.get("args")
+                        if containerArgs  != None:
+                            for arg in c["args"]:
+                                if arg == "--leader-elect" or arg == "--leader-elect=true":
+                                    continue
+                                debugArgs.append(arg)
                         c["command"] = cmd
                         print(cmd)
                         if len(debugArgs) == 0:
-                            c.pop("args")
+                            c.pop("args",{})
                         else:
                             c["args"] = debugArgs
-                        c.pop("readinessProbe")
-                        c.pop("livenessProbe")
+                        c.pop("readinessProbe",{})
+                        c.pop("livenessProbe",{})
                 if env != {}:
                     debugEnv = dict([])
                     containerEnvVars = c.get("env")
